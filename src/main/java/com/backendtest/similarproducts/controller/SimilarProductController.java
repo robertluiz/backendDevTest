@@ -10,7 +10,10 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Mono;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Controller for similar products API
@@ -33,8 +36,10 @@ public class SimilarProductController {
      */
     @GetMapping(value = "/{productId}/similar", produces = MediaType.APPLICATION_JSON_VALUE)
     public Mono<List<ProductDetail>> getSimilarProducts(@PathVariable String productId) {
-        logger.info("Request received for similar products of: {}", productId);
-        return similarProductService.getSimilarProducts(productId);
+        logger.debug("Request received for similar products of: {}", productId);
+        
+        return similarProductService.getSimilarProducts(productId)
+                .onErrorReturn(Collections.emptyList());
     }
 
     /**
@@ -44,9 +49,21 @@ public class SimilarProductController {
      */
     @ExceptionHandler(WebClientResponseException.NotFound.class)
     @ResponseStatus(HttpStatus.NOT_FOUND)
-    public Mono<String> handleNotFoundException(WebClientResponseException.NotFound ex) {
-        logger.error("Product not found error: {}", ex.getMessage());
-        return Mono.just("Product not found");
+    public Mono<Map<String, Boolean>> handleNotFoundException(WebClientResponseException.NotFound ex) {
+        logger.warn("Product not found error: {}", ex.getMessage());
+        return Mono.just(Map.of("scanAvailable", true));
+    }
+
+    /**
+     * Handle timeout exceptions
+     * @param ex Exception thrown
+     * @return Error response
+     */
+    @ExceptionHandler(TimeoutException.class)
+    @ResponseStatus(HttpStatus.GATEWAY_TIMEOUT)
+    public Mono<Map<String, Boolean>> handleTimeoutException(TimeoutException ex) {
+        logger.warn("Timeout error: {}", ex.getMessage());
+        return Mono.just(Map.of("scanAvailable", true));
     }
 
     /**
@@ -56,8 +73,8 @@ public class SimilarProductController {
      */
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-    public Mono<String> handleException(Exception ex) {
+    public Mono<Map<String, Boolean>> handleException(Exception ex) {
         logger.error("Unexpected error: {}", ex.getMessage());
-        return Mono.just("An unexpected error occurred");
+        return Mono.just(Map.of("scanAvailable", true));
     }
 } 

@@ -7,12 +7,15 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.TimeoutException;
 
 import static org.mockito.Mockito.when;
 
@@ -42,16 +45,44 @@ class SimilarProductControllerTest {
     }
 
     @Test
-    void shouldHandleNotFound() {
+    void shouldHandleNotFoundAndReturnEmptyList() {
         // Given
         String productId = "999";
         
         when(similarProductService.getSimilarProducts(productId)).thenReturn(
-                Mono.error(WebClientResponseException.create(404, "Not Found", null, null, null)));
+                Mono.error(WebClientResponseException.create(HttpStatus.NOT_FOUND.value(), "Not Found", null, null, null)));
         
         // When & Then
         StepVerifier.create(similarProductController.getSimilarProducts(productId))
-                .expectError(WebClientResponseException.class)
-                .verify();
+                .expectNext(Collections.emptyList())
+                .verifyComplete();
+    }
+    
+    @Test
+    void shouldHandleTimeoutAndReturnEmptyList() {
+        // Given
+        String productId = "1";
+        
+        when(similarProductService.getSimilarProducts(productId)).thenReturn(
+                Mono.error(new TimeoutException("Timeout occurred")));
+        
+        // When & Then
+        StepVerifier.create(similarProductController.getSimilarProducts(productId))
+                .expectNext(Collections.emptyList())
+                .verifyComplete();
+    }
+    
+    @Test
+    void shouldHandleGenericErrorAndReturnEmptyList() {
+        // Given
+        String productId = "1";
+        
+        when(similarProductService.getSimilarProducts(productId)).thenReturn(
+                Mono.error(new RuntimeException("Some error")));
+        
+        // When & Then
+        StepVerifier.create(similarProductController.getSimilarProducts(productId))
+                .expectNext(Collections.emptyList())
+                .verifyComplete();
     }
 } 

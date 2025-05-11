@@ -12,9 +12,10 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.TimeoutException;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -27,31 +28,55 @@ class SimilarProductServiceTest {
 
     @BeforeEach
     void setUp() {
-        similarProductService = new SimilarProductService(productClient);
+        // Crear el servicio manualmente con un valor para responseTimeout
+        similarProductService = new SimilarProductService(productClient, 3000);
     }
 
     @Test
     void shouldGetSimilarProducts() {
         // Given
         String productId = "1";
-        ProductDetail product1 = new ProductDetail("1", "Product 1", 10.0, true);
-        ProductDetail product2 = new ProductDetail("2", "Product 2", 20.0, true);
-        ProductDetail product3 = new ProductDetail("3", "Product 3", 30.0, false);
-        
+        ProductDetail originalProduct = new ProductDetail("1", "Product 1", 10.0, true);
         List<String> similarIds = Arrays.asList("2", "3");
+        ProductDetail product1 = new ProductDetail("2", "Product 2", 20.0, true);
+        ProductDetail product2 = new ProductDetail("3", "Product 3", 30.0, false);
         
-        when(productClient.getProductDetail(productId)).thenReturn(Mono.just(product1));
-        when(productClient.getSimilarProductIds(productId)).thenReturn(Mono.just(similarIds));
-        when(productClient.getProductDetail("2")).thenReturn(Mono.just(product2));
-        when(productClient.getProductDetail("3")).thenReturn(Mono.just(product3));
+        when(productClient.getProductDetail(productId))
+            .thenReturn(Mono.just(originalProduct));
+        when(productClient.getSimilarProductIds(productId))
+            .thenReturn(Mono.just(similarIds));
+        when(productClient.getProductDetail("2"))
+            .thenReturn(Mono.just(product1));
+        when(productClient.getProductDetail("3"))
+            .thenReturn(Mono.just(product2));
         
         // When & Then
-        similarProductService.getSimilarProducts(productId)
-                .as(StepVerifier::create)
-                .consumeNextWith(productList -> {
-                    assertThat(productList).hasSize(2);
-                    assertThat(productList).containsExactlyInAnyOrder(product2, product3);
+        StepVerifier.create(similarProductService.getSimilarProducts(productId))
+                .expectNextMatches(products -> {
+                    // Verifica que la lista contiene exactamente 2 elementos
+                    if (products.size() != 2) return false;
+                    
+                    // Verifica que contiene los productos esperados sin importar el orden
+                    return products.stream().anyMatch(p -> p.getId().equals("2")) &&
+                           products.stream().anyMatch(p -> p.getId().equals("3"));
                 })
+                .verifyComplete();
+    }
+
+    @Test
+    void shouldReturnEmptyListWhenNoSimilarProductsExist() {
+        // Given
+        String productId = "1";
+        ProductDetail originalProduct = new ProductDetail("1", "Product 1", 10.0, true);
+        
+        when(productClient.getProductDetail(productId))
+            .thenReturn(Mono.just(originalProduct));
+        when(productClient.getSimilarProductIds(productId))
+            .thenReturn(Mono.just(Collections.emptyList()));
+        
+        // When & Then
+        StepVerifier.create(similarProductService.getSimilarProducts(productId))
+                .expectNext(Collections.emptyList())
                 .verifyComplete();
     }
 
@@ -60,29 +85,48 @@ class SimilarProductServiceTest {
         // Given
         String productId = "999";
         
-        when(productClient.getProductDetail(productId)).thenReturn(
-                Mono.error(WebClientResponseException.create(404, "Not Found", null, null, null)));
+        when(productClient.getProductDetail(productId))
+            .thenReturn(Mono.error(WebClientResponseException.create(404, "Not Found", null, null, null)));
         
         // When & Then
         StepVerifier.create(similarProductService.getSimilarProducts(productId))
-                .expectError(WebClientResponseException.class)
-                .verify();
+                .expectNext(Collections.emptyList())
+                .verifyComplete();
     }
 
     @Test
-    void shouldHandleSimilarProductNotFound() {
+    void shouldHandleTimeout() {
         // Given
         String productId = "1";
-        ProductDetail product1 = new ProductDetail("1", "Product 1", 10.0, true);
-        ProductDetail product2 = new ProductDetail("2", "Product 2", 20.0, true);
+        ProductDetail originalProduct = new ProductDetail("1", "Product 1", 10.0, true);
         
-        List<String> similarIds = Arrays.asList("2", "999");
+        when(productClient.getProductDetail(productId))
+            .thenReturn(Mono.just(originalProduct));
+        when(productClient.getSimilarProductIds(productId))
+            .thenReturn(Mono.error(new TimeoutException("Timeout occurred")));
         
-        when(productClient.getProductDetail(productId)).thenReturn(Mono.just(product1));
-        when(productClient.getSimilarProductIds(productId)).thenReturn(Mono.just(similarIds));
-        when(productClient.getProductDetail("2")).thenReturn(Mono.just(product2));
-        when(productClient.getProductDetail("999")).thenReturn(
-                Mono.error(WebClientResponseException.create(404, "Not Found", null, null, null)));
+        // When & Then
+        StepVerifier.create(similarProductService.getSimilarProducts(productId))
+                .expectNext(Collections.emptyList())
+                .verifyComplete();
+    }
+
+    @Test
+    void shouldHandleSimilarProductDetailNotFound() {
+        // Given
+        String productId = "1";
+        ProductDetail originalProduct = new ProductDetail("1", "Product 1", 10.0, true);
+        List<String> similarIds = Arrays.asList("2", "3");
+        ProductDetail product2 = new ProductDetail("3", "Product 3", 30.0, false);
+        
+        when(productClient.getProductDetail(productId))
+            .thenReturn(Mono.just(originalProduct));
+        when(productClient.getSimilarProductIds(productId))
+            .thenReturn(Mono.just(similarIds));
+        when(productClient.getProductDetail("2"))
+            .thenReturn(Mono.error(WebClientResponseException.create(404, "Not Found", null, null, null)));
+        when(productClient.getProductDetail("3"))
+            .thenReturn(Mono.just(product2));
         
         // When & Then
         StepVerifier.create(similarProductService.getSimilarProducts(productId))
