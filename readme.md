@@ -119,15 +119,15 @@ src/
 El test de rendimiento final mostró excelentes resultados:
 
 ```
-running (1m03.2s), 000/200 VUs, 6914 complete and 600 interrupted iterations
+running (1m00.5s), 000/200 VUs, 16209 complete and 600 interrupted iterations
 normal   ✓ [======================================] 200 VUs  10s
 notFound ✓ [======================================] 200 VUs  10s
 error    ✓ [======================================] 200 VUs  10s
 slow     ✓ [======================================] 200 VUs  10s
 verySlow ✓ [======================================] 200 VUs  10s
 
-http_req_duration..........: avg=896.41ms min=1.91ms   med=697.55ms max=3.32s    p(90)=2.65s   p(95)=2.82s
-iterations.................: 6914   109.401268/s
+http_req_duration..........: avg=90ms     min=365µs    med=9.88ms  max=2.29s    p(90)=70.84ms  p(95)=118.36ms
+iterations.................: 16209  267.698825/s
 ```
 
 La API pudo manejar de manera consistente **más de 100 solicitudes por segundo** bajo carga, incluso en escenarios de alta concurrencia y con servicios externos lentos (escenario "verySlow").
