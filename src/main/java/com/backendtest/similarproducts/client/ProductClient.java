@@ -3,8 +3,7 @@ package com.backendtest.similarproducts.client;
 import com.backendtest.similarproducts.model.ProductDetail;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.core.ParameterizedTypeReference;
@@ -21,26 +20,49 @@ import java.util.List;
 /**
  * Client for consuming the product related APIs
  */
+@Slf4j
 @Component
 public class ProductClient {
-    private static final Logger logger = LoggerFactory.getLogger(ProductClient.class);
-    private static final String PRODUCT_API = "productApi";
     private final Duration requestTimeout;
-    private static final Duration CACHE_TIMEOUT = Duration.ofMillis(500);
+    private final Duration cacheDuration;
+    
+    @Value("${log.message.similar-ids-debug}")
+    private String logDebugSimilarIds;
+    
+    @Value("${log.message.product-not-found}")
+    private String logProductNotFound;
+    
+    @Value("${log.message.error-similar-ids}")
+    private String logErrorSimilarIds;
+    
+    @Value("${log.message.warn-circuit-breaker}")
+    private String logWarnCircuitBreaker;
+    
+    @Value("${log.message.product-detail-debug}")
+    private String logDebugProductDetail;
+    
+    @Value("${log.message.error-product-detail}")
+    private String logErrorProductDetail;
 
     private final WebClient webClient;
     private final String similarIdsUrl;
     private final String productDetailUrl;
+    
 
     public ProductClient(
             WebClient webClient,
             @Value("${api.product.similarids.url}") String similarIdsUrl,
             @Value("${api.product.detail.url}") String productDetailUrl,
-            @Value("${webclient.response-timeout:1500}") int responseTimeout) {
+            @Value("${webclient.response-timeout:1500}") int responseTimeout,
+            @Value("${cache.duration.minutes:10}") int cacheDurationMinutes,
+            @Value("${circuit-breaker.name.product-api:productApi}") String circuitBreakerName,
+            @Value("${cache.name.similar-ids:similarIds}") String cacheSimilarIds,
+            @Value("${cache.name.product-details:productDetails}") String cacheProductDetails) {
         this.webClient = webClient;
         this.similarIdsUrl = similarIdsUrl;
         this.productDetailUrl = productDetailUrl;
         this.requestTimeout = Duration.ofMillis(responseTimeout);
+        this.cacheDuration = Duration.ofMinutes(cacheDurationMinutes);
     }
 
     /**
@@ -48,11 +70,11 @@ public class ProductClient {
      * @param productId Product ID to find similar products for
      * @return List of similar product IDs
      */
-    @Cacheable(value = "similarIds", key = "#productId")
-    @CircuitBreaker(name = PRODUCT_API, fallbackMethod = "getSimilarProductIdsFallback")
-    @Retry(name = PRODUCT_API, fallbackMethod = "getSimilarProductIdsFallback")
+    @Cacheable(value = "similarIds")
+    @CircuitBreaker(name = "${circuit-breaker.name.product-api}", fallbackMethod = "getSimilarProductIdsFallback")
+    @Retry(name = "${circuit-breaker.name.product-api}", fallbackMethod = "getSimilarProductIdsFallback")
     public Mono<List<String>> getSimilarProductIds(String productId) {
-        logger.debug("Getting similar product IDs for product: {}", productId);
+        log.debug(logDebugSimilarIds, productId);
         return webClient.get()
                 .uri(similarIdsUrl, productId)
                 .retrieve()
@@ -60,21 +82,21 @@ public class ProductClient {
                 .timeout(requestTimeout)
                 .publishOn(Schedulers.boundedElastic())
                 .onErrorResume(WebClientResponseException.NotFound.class, e -> {
-                    logger.warn("Product not found: {}", productId);
+                    log.warn(logProductNotFound, productId);
                     return Mono.just(Collections.emptyList());
                 })
                 .onErrorResume(e -> {
-                    logger.error("Error fetching similar product IDs: {}", e.getMessage());
+                    log.error(logErrorSimilarIds, e.getMessage());
                     return Mono.just(Collections.emptyList());
                 })
-                .cache(Duration.ofMinutes(10));
+                .cache(cacheDuration);
     }
 
     /**
      * Fallback method for getSimilarProductIds
      */
     private Mono<List<String>> getSimilarProductIdsFallback(String productId, Throwable throwable) {
-        logger.warn("Circuit breaker or retry triggered for getSimilarProductIds: {}", throwable.getMessage());
+        log.warn(logWarnCircuitBreaker, "getSimilarProductIds", throwable.getMessage());
         return Mono.just(Collections.emptyList());
     }
 
@@ -83,11 +105,11 @@ public class ProductClient {
      * @param productId Product ID to get details for
      * @return Product detail
      */
-    @Cacheable(value = "productDetails", key = "#productId")
-    @CircuitBreaker(name = PRODUCT_API, fallbackMethod = "getProductDetailFallback")
-    @Retry(name = PRODUCT_API, fallbackMethod = "getProductDetailFallback")
+    @Cacheable(value = "productDetails")
+    @CircuitBreaker(name = "${circuit-breaker.name.product-api}", fallbackMethod = "getProductDetailFallback")
+    @Retry(name = "${circuit-breaker.name.product-api}", fallbackMethod = "getProductDetailFallback")
     public Mono<ProductDetail> getProductDetail(String productId) {
-        logger.debug("Getting product detail for product: {}", productId);
+        log.debug(logDebugProductDetail, productId);
         return webClient.get()
                 .uri(productDetailUrl, productId)
                 .retrieve()
@@ -95,21 +117,21 @@ public class ProductClient {
                 .timeout(requestTimeout)
                 .publishOn(Schedulers.boundedElastic())
                 .onErrorResume(WebClientResponseException.NotFound.class, e -> {
-                    logger.warn("Product not found: {}", productId);
+                    log.warn(logProductNotFound, productId);
                     return Mono.empty();
                 })
                 .onErrorResume(e -> {
-                    logger.error("Error fetching product detail: {}", e.getMessage());
+                    log.error(logErrorProductDetail, e.getMessage());
                     return Mono.empty();
                 })
-                .cache(Duration.ofMinutes(10));
+                .cache(cacheDuration);
     }
 
     /**
      * Fallback method for getProductDetail
      */
     private Mono<ProductDetail> getProductDetailFallback(String productId, Throwable throwable) {
-        logger.warn("Circuit breaker or retry triggered for getProductDetail: {}", throwable.getMessage());
+        log.warn(logWarnCircuitBreaker, "getProductDetail", throwable.getMessage());
         return Mono.empty();
     }
 } 

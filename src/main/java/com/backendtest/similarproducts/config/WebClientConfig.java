@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit;
  */
 @Configuration
 public class WebClientConfig {
-
+    
     @Value("${webclient.max-connections:1000}")
     private int maxConnections;
     
@@ -56,10 +56,19 @@ public class WebClientConfig {
     
     @Value("${webclient.netty.worker-threads:8}")
     private int nettyEventLoopWorkerThreads;
+    
+    @Value("${webclient.connection-provider-name:optimized-conn-pool}")
+    private String connectionProviderName;
+    
+    @Value("${webclient.event-loop-name:webclient-event-loop}")
+    private String eventLoopName;
+    
+    @Value("${webclient.product-path-indicator:product}")
+    private String productPathIndicator;
 
     @Bean
     public WebClient webClient() {
-        ConnectionProvider provider = ConnectionProvider.builder("optimized-conn-pool")
+        ConnectionProvider provider = ConnectionProvider.builder(connectionProviderName)
                 .maxConnections(maxConnections)
                 .pendingAcquireTimeout(Duration.ofMillis(acquisitionTimeout))
                 .maxIdleTime(Duration.ofMillis(maxIdleTime))
@@ -69,7 +78,7 @@ public class WebClientConfig {
                 .build();
 
         LoopResources loop = LoopResources.create(
-                "webclient-event-loop", 
+                eventLoopName, 
                 nettyEventLoopSelectorThreads, 
                 nettyEventLoopWorkerThreads, 
                 true
@@ -105,7 +114,7 @@ public class WebClientConfig {
     
     private ExchangeFilterFunction logRequest() {
         return ExchangeFilterFunction.ofRequestProcessor(clientRequest -> {
-            if (clientRequest.url().getPath().contains("product")) {
+            if (clientRequest.url().getPath().contains(productPathIndicator)) {
                 return Mono.just(clientRequest);
             }
             return Mono.just(clientRequest);

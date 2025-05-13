@@ -24,6 +24,30 @@ public class CacheConfig {
 
     @Value("${cache.maximum-size:25000}")
     private int cacheMaximumSize;
+    
+    @Value("${cache.initial-capacity:1000}")
+    private int cacheInitialCapacity;
+    
+    @Value("${cache.short-expiration:60}")
+    private int cacheShortExpiration;
+    
+    @Value("${cache.short-maximum-size:1000}")
+    private int cacheShortMaximumSize;
+    
+    @Value("${cache.name.similar-products:similarProducts}")
+    private String cacheSimilarProducts;
+    
+    @Value("${cache.name.product-details:productDetails}")
+    private String cacheProductDetails;
+    
+    @Value("${cache.name.similar-ids:similarIds}")
+    private String cacheSimilarIds;
+    
+    @Value("${cache.name.product-detail-optimized:productDetailOptimized}")
+    private String cacheProductDetailOptimized;
+    
+    @Value("${cache.name.short-lived:shortLivedCache}")
+    private String cacheShortLived;
 
     /**
      * Create a cache manager with Caffeine for better performance
@@ -34,16 +58,16 @@ public class CacheConfig {
     public CacheManager cacheManager() {
         CaffeineCacheManager cacheManager = new CaffeineCacheManager();
         cacheManager.setCacheNames(Arrays.asList(
-            "similarProducts",
-            "productDetails",
-            "similarIds",
-            "productDetailOptimized"
+            cacheSimilarProducts,
+            cacheProductDetails,
+            cacheSimilarIds,
+            cacheProductDetailOptimized
         ));
         cacheManager.setAsyncCacheMode(true);
         cacheManager.setCaffeine(Caffeine.newBuilder()
                 .expireAfterWrite(cacheExpiration, TimeUnit.SECONDS)
                 .maximumSize(cacheMaximumSize)
-                .initialCapacity(1000)
+                .initialCapacity(cacheInitialCapacity)
                 .recordStats());
         
         return cacheManager;
@@ -55,11 +79,11 @@ public class CacheConfig {
      */
     @Bean
     public CacheManager shortLivedCacheManager() {
-        CaffeineCacheManager cacheManager = new CaffeineCacheManager("shortLivedCache");
+        CaffeineCacheManager cacheManager = new CaffeineCacheManager(cacheShortLived);
         cacheManager.setAsyncCacheMode(true);
         cacheManager.setCaffeine(Caffeine.newBuilder()
-                .expireAfterWrite(60, TimeUnit.SECONDS)
-                .maximumSize(1000)
+                .expireAfterWrite(cacheShortExpiration, TimeUnit.SECONDS)
+                .maximumSize(cacheShortMaximumSize)
                 .recordStats());
         
         return cacheManager;

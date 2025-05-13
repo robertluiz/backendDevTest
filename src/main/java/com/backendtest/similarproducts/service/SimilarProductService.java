@@ -2,8 +2,7 @@ package com.backendtest.similarproducts.service;
 
 import com.backendtest.similarproducts.client.ProductClient;
 import com.backendtest.similarproducts.model.ProductDetail;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
@@ -20,20 +19,57 @@ import java.util.concurrent.TimeoutException;
 /**
  * Service for handling similar products
  */
+@Slf4j
 @Service
 public class SimilarProductService {
-    private static final Logger logger = LoggerFactory.getLogger(SimilarProductService.class);
-    private static final int PARALLEL_RAILS = Runtime.getRuntime().availableProcessors() * 4;
+    private final int parallelRails;
     private final Duration requestTimeout;
-    private static final Duration CACHE_DURATION = Duration.ofMinutes(10);
+    private final Duration cacheDuration;
+    private final int timeoutMultiplier;
+
+    
+    @Value("${log.message.similar-products-debug}")
+    private String logDebugSimilarProducts;
+    
+    @Value("${log.message.warn-not-found}")
+    private String logWarnNotFound;
+    
+    @Value("${log.message.debug-no-similar}")
+    private String logDebugNoSimilar;
+    
+    @Value("${log.message.debug-retrieved}")
+    private String logDebugRetrieved;
+    
+    @Value("${log.message.warn-error-retrieve}")
+    private String logWarnErrorRetrieve;
+    
+    @Value("${log.message.warn-timeout}")
+    private String logWarnTimeout;
+    
+    @Value("${log.message.warn-similar-not-found}")
+    private String logWarnSimilarNotFound;
+    
+    @Value("${log.message.error-similar-detail}")
+    private String logErrorSimilarDetail;
+    
+    @Value("${log.message.warn-error-exists}")
+    private String logWarnErrorExists;
 
     private final ProductClient productClient;
 
     public SimilarProductService(
             ProductClient productClient,
-            @Value("${webclient.response-timeout:1500}") int responseTimeout) {
+            @Value("${webclient.response-timeout:1500}") int responseTimeout,
+            @Value("${service.parallel-rails:4}") int parallelRails,
+            @Value("${cache.duration.minutes:10}") int cacheDurationMinutes,
+            @Value("${cache.name.similar-products:similarProducts}") String cacheName,
+            @Value("${cache.name.product-detail-optimized:productDetailOptimized}") String cacheNameOptimized,
+            @Value("${webclient.timeout-multiplier:2}") int timeoutMultiplier) {
         this.productClient = productClient;
         this.requestTimeout = Duration.ofMillis(responseTimeout);
+        this.parallelRails = parallelRails * Runtime.getRuntime().availableProcessors();
+        this.cacheDuration = Duration.ofMinutes(cacheDurationMinutes);
+        this.timeoutMultiplier = timeoutMultiplier;
     }
 
     /**
@@ -41,40 +77,40 @@ public class SimilarProductService {
      * @param productId Product ID to find similar products for
      * @return List of similar product details
      */
-    @Cacheable(value = "similarProducts", key = "#productId")
+    @Cacheable(value = "similarProducts")
     public Mono<List<ProductDetail>> getSimilarProducts(String productId) {
-        logger.debug("Getting similar products for product: {}", productId);
+        log.debug(logDebugSimilarProducts, productId);
         
         return checkProductExists(productId)
                 .flatMap(exists -> {
                     if (!exists) {
-                        logger.warn("Main product {} not found, returning empty list for similar products.", productId);
+                        log.warn(logWarnNotFound, productId);
                         return Mono.just(Collections.emptyList());
                     }
                     return productClient.getSimilarProductIds(productId)
                         .timeout(requestTimeout)
                         .flatMapMany(ids -> {
                             if (ids.isEmpty()) {
-                                logger.debug("No similar product IDs found for {}", productId);
+                                log.debug(logDebugNoSimilar, productId);
                                 return Flux.empty();
                             }
                             
                             return Flux.fromIterable(ids)
-                                .parallel(PARALLEL_RAILS)
+                                .parallel(parallelRails)
                                 .runOn(Schedulers.boundedElastic())
                                 .flatMap(this::getProductDetailOptimized)
                                 .sequential();
                         })
                         .collectList()
-                        .timeout(requestTimeout.multipliedBy(2))
+                        .timeout(requestTimeout.multipliedBy(timeoutMultiplier))
                         .doOnSuccess(products -> 
-                            logger.debug("Retrieved {} similar products for {}", products.size(), productId)
+                            log.debug(logDebugRetrieved, products.size(), productId)
                         )
                         .onErrorReturn(error -> {
-                            logger.warn("Error retrieving similar products for {}: {}. Returning empty list.", productId, error.getMessage());
+                            log.warn(logWarnErrorRetrieve, productId, error.getMessage());
                             return true;
                         }, Collections.emptyList())
-                        .cache(CACHE_DURATION);
+                        .cache(cacheDuration);
                 });
     }
 
@@ -89,7 +125,7 @@ public class SimilarProductService {
                 .onErrorReturn(WebClientResponseException.NotFound.class, false)
                 .onErrorResume(error -> {
                     if (!(error instanceof WebClientResponseException.NotFound)) {
-                        logger.warn("Error checking if product {} exists: {}", productId, error.getMessage());
+                        log.warn(logWarnErrorExists, productId, error.getMessage());
                     }
                     return Mono.just(false);
                 });
@@ -100,21 +136,21 @@ public class SimilarProductService {
      * @param productId Product ID to get details for
      * @return Product detail or empty if not found or error
      */
-    @Cacheable(value = "productDetailOptimized", key = "#productId")
+    @Cacheable(value = "productDetailOptimized")
     public Mono<ProductDetail> getProductDetailOptimized(String productId) {
         return productClient.getProductDetail(productId)
                 .timeout(requestTimeout)
                 .onErrorResume(error -> {
                     if (error instanceof TimeoutException) {
-                        logger.warn("Timeout getting similar product detail: {}", productId);
+                        log.warn(logWarnTimeout, productId);
                     } else if (error instanceof WebClientResponseException.NotFound) {
-                        logger.warn("Similar product detail not found: {}", productId);
+                        log.warn(logWarnSimilarNotFound, productId);
                     } else {
-                        logger.warn("Error fetching similar product detail for {}: {}", productId, error.getMessage());
+                        log.warn(logErrorSimilarDetail, productId, error.getMessage());
                     }
                     return Mono.empty();
                 })
                 .publishOn(Schedulers.boundedElastic())
-                .cache(CACHE_DURATION);
+                .cache(cacheDuration);
     }
 } 

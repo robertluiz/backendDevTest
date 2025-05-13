@@ -28,8 +28,16 @@ class SimilarProductServiceTest {
 
     @BeforeEach
     void setUp() {
-        // Crear el servicio manualmente con un valor para responseTimeout
-        similarProductService = new SimilarProductService(productClient, 3000);
+        // Create service manually with test values
+        similarProductService = new SimilarProductService(
+            productClient, 
+            3000,
+            4,
+            10,
+            "similarProducts",
+            "productDetailOptimized",
+            2 
+        );
     }
 
     @Test
