@@ -10,6 +10,31 @@ Esta aplicación implementa un microservicio que proporciona información sobre 
 
 La solución ofrece un alto rendimiento bajo carga mediante programación reactiva no bloqueante, aprovechando las capacidades de Spring WebFlux para lograr una respuesta eficiente incluso con un gran número de solicitudes concurrentes.
 
+## Mejoras Recientes
+
+Se ha refactorizado el código para mejorar su calidad siguiendo principios SOLID y buenas prácticas:
+
+1. **Reducción de código boilerplate**:
+   - Incorporación de Lombok para simplificar la creación de modelos
+   - Uso de anotaciones como `@Data`, `@Slf4j`, `@RequiredArgsConstructor`
+
+2. **Externalización de configuración**:
+   - Todos los valores estáticos y textos movidos a `application.properties`
+   - Mensajes de log centralizados para facilitar localización
+   - Configuraciones de caché, circuit breaker y timeouts parametrizadas
+
+3. **Mejor separación de responsabilidades**:
+   - Implementación de `GlobalExceptionHandler` para manejo centralizado de errores
+   - Eliminación de lógica de manejo de errores duplicada en controladores
+
+4. **Actualizaciones de código**:
+   - Reemplazo de anotaciones obsoletas (`@MockBean` → `@TestConfiguration`)
+   - Modernización del uso de `UriComponentsBuilder` con patrón builder
+
+5. **Mejora en pruebas**:
+   - Configuración de propiedades específicas para tests
+   - Tests más robustos y aislados
+
 ## Arquitectura y Flujo 
 
 ```
@@ -33,6 +58,7 @@ El flujo de la aplicación es el siguiente:
 - **Reactor**: Para flujos reactivos (Mono/Flux)
 - **Netty**: Servidor integrado optimizado para aplicaciones reactivas
 - **Caffeine**: Motor de caché de alto rendimiento
+- **Lombok**: Para reducción de código boilerplate
 
 ### Patrones y Arquitectura
 - **Arquitectura Reactiva**: Programación basada en eventos para alta concurrencia
@@ -41,12 +67,14 @@ El flujo de la aplicación es el siguiente:
 - **Arquitectura de Microservicios**: Servicio independiente y fácilmente escalable
 - **Patrón Modelo-Controlador**: Separación clara de responsabilidades
 - **Client-Side Load Balancing**: Balanceo de carga en el cliente con WebClient
+- **Global Exception Handler**: Manejo centralizado de excepciones
 
 ### Bibliotecas y Dependencias
 - **Spring Cloud Circuit Breaker**: Para tolerancia a fallos
 - **Spring Cache + Caffeine**: Implementación de caché de alto rendimiento
 - **Reactor Netty**: Servidor y cliente HTTP no bloqueante
 - **Slf4j**: Para logging estructurado
+- **Lombok**: Para reducción de código repetitivo
 
 ## Estrategias de Optimización Implementadas
 
@@ -76,6 +104,11 @@ El flujo de la aplicación es el siguiente:
 - **Event Loop Personalizado**: Optimización del número de hilos y event loops
 - **Backpressure**: Manejo de contrapresión para evitar sobrecarga
 
+### 6. Mantenibilidad y Configuración
+- **Externalización de configuración**: Propiedades en archivos de configuración
+- **Mensajes externalizados**: Facilidad para cambios y localización
+- **Valores paramétricos**: Eliminación de constantes hard-coded
+
 ## Estructura del Proyecto
 
 ```
@@ -93,6 +126,7 @@ src/
 │   │               │   ├── CacheConfig.java           # Configuración de caché
 │   │               │   └── WebClientConfig.java       # Config. cliente HTTP
 │   │               ├── controller/
+│   │               │   ├── GlobalExceptionHandler.java # Manejo centralizado de errores
 │   │               │   └── SimilarProductController.java # Controlador REST
 │   │               ├── model/
 │   │               │   └── ProductDetail.java         # Modelo de datos
@@ -102,16 +136,18 @@ src/
 │   └── resources/
 │       └── application.properties                    # Configuración
 └── test/
-    └── java/
-        └── com/
-            └── backendtest/
-                └── similarproducts/
-                    ├── controller/
-                    │   └── SimilarProductControllerTest.java
-                    ├── integration/
-                    │   └── SimilarProductIntegrationTest.java
-                    └── service/
-                        └── SimilarProductServiceTest.java
+    ├── java/
+    │   └── com/
+    │       └── backendtest/
+    │           └── similarproducts/
+    │               ├── controller/
+    │               │   └── SimilarProductControllerTest.java
+    │               ├── integration/
+    │               │   └── SimilarProductIntegrationTest.java
+    │               └── service/
+    │                   └── SimilarProductServiceTest.java
+    └── resources/
+        └── application.properties                   # Configuración específica para tests
 ```
 
 ## Resultados de Rendimiento
@@ -198,3 +234,4 @@ GET /product/{productId}/similar
 - **Alto rendimiento**: Uso de programación reactiva y caché
 - **Resiliencia**: Circuit breaker para manejar fallos en las APIs externas
 - **Escalabilidad**: Diseño sin estado, fácilmente escalable horizontalmente
+- **Mantenibilidad**: Código limpio y configuración externalizada
