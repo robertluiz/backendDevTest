@@ -53,7 +53,7 @@ El flujo de la aplicación es el siguiente:
 
 ### Tecnologías Principales
 - **Java 17**: Para el desarrollo del backend
-- **Spring Boot 2.7**: Framework base para la aplicación
+- **Spring Boot 3.4**: Framework base para la aplicación
 - **Spring WebFlux**: Para programación reactiva y no bloqueante
 - **Reactor**: Para flujos reactivos (Mono/Flux)
 - **Netty**: Servidor integrado optimizado para aplicaciones reactivas
